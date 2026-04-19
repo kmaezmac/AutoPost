@@ -150,18 +150,23 @@ const wpBase = () => (process.env.WP_SITE_URL || '').replace(/\/$/, '');
 const getOrCreateWpTerm = async (endpoint, name) => {
     const auth = wpAuthHeader();
     const base = wpBase();
+    const searchUrl = `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`;
+    console.log(`[wp] GET ${searchUrl}`);
     try {
-        const search = await axios.get(
-            `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`,
-            { headers: { Authorization: auth } }
-        );
+        const search = await axios.get(searchUrl, { headers: { Authorization: auth } });
+        console.log(`[wp] term search status: ${search.status}, found: ${search.data.length}`);
         if (search.data.length > 0) return search.data[0].id;
-    } catch (_) { /* not found, create below */ }
+    } catch (e) {
+        console.warn(`[wp] term search failed: ${e.response?.status} ${e.message}`);
+    }
+    const createUrl = `${base}/wp-json/wp/v2/${endpoint}`;
+    console.log(`[wp] POST ${createUrl} name=${name}`);
     const created = await axios.post(
-        `${base}/wp-json/wp/v2/${endpoint}`,
+        createUrl,
         { name },
         { headers: { Authorization: auth, 'Content-Type': 'application/json' } }
     );
+    console.log(`[wp] term created id: ${created.data.id}`);
     return created.data.id;
 };
 
@@ -172,11 +177,17 @@ const getOrCreateWpTerm = async (endpoint, name) => {
 export const createWordPressPost = async ({ title, content, excerpt, tagNames = [], status = 'publish' }) => {
     const auth = wpAuthHeader();
     const base = wpBase();
+    console.log(`[wp] base URL: ${base}`);
+    console.log(`[wp] username: ${process.env.WP_USERNAME}`);
+    console.log(`[wp] app password set: ${!!process.env.WP_APP_PASSWORD}`);
 
     const tagIds = await Promise.all(tagNames.map(t => getOrCreateWpTerm('tags', t)));
+    console.log(`[wp] tagIds: ${JSON.stringify(tagIds)}`);
 
+    const postUrl = `${base}/wp-json/wp/v2/posts`;
+    console.log(`[wp] POST ${postUrl}`);
     const res = await axios.post(
-        `${base}/wp-json/wp/v2/posts`,
+        postUrl,
         {
             title,
             content,
@@ -188,6 +199,7 @@ export const createWordPressPost = async ({ title, content, excerpt, tagNames = 
         },
         { headers: { Authorization: auth, 'Content-Type': 'application/json' } }
     );
+    console.log(`[wp] post created: ${res.data.link}`);
     return res.data;
 };
 
