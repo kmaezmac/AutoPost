@@ -60,11 +60,13 @@ export const fetchRakutenProduct = async () => {
     const item = items[Math.floor(Math.random() * items.length)].Item;
     const imageUrl = (item.mediumImageUrls?.[0]?.imageUrl || '').replace(/\?_ex=\d+x\d+$/, '');
 
+    const decodeUrl = (u) => (u || '').replace(/&amp;/g, '&').replace(/&#0*38;/g, '&');
+
     return {
         itemName: item.itemName || '',
         catchcopy: item.catchcopy || '',
         itemCaption: (item.itemCaption || '').substring(0, 500),
-        affiliateUrl: item.affiliateUrl || '',
+        affiliateUrl: decodeUrl(item.affiliateUrl),
         imageUrl,
         reviewAverage: item.reviewAverage || 0,
         reviewCount: item.reviewCount || 0,
