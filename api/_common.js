@@ -145,9 +145,11 @@ export const fetchAmazonProduct = async () => {
 const wpAuthHeader = () =>
     'Basic ' + Buffer.from(`${process.env.WP_USERNAME}:${process.env.WP_APP_PASSWORD}`).toString('base64');
 
+const wpBase = () => (process.env.WP_SITE_URL || '').replace(/\/$/, '');
+
 const getOrCreateWpTerm = async (endpoint, name) => {
     const auth = wpAuthHeader();
-    const base = process.env.WP_SITE_URL;
+    const base = wpBase();
     try {
         const search = await axios.get(
             `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`,
@@ -169,7 +171,7 @@ const getOrCreateWpTerm = async (endpoint, name) => {
  */
 export const createWordPressPost = async ({ title, content, excerpt, tagNames = [], status = 'publish' }) => {
     const auth = wpAuthHeader();
-    const base = process.env.WP_SITE_URL;
+    const base = wpBase();
 
     const tagIds = await Promise.all(tagNames.map(t => getOrCreateWpTerm('tags', t)));
 
