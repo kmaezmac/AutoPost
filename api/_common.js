@@ -50,7 +50,7 @@ export const fetchRakutenProduct = async () => {
     const res = await axios.get(url, {
         headers: {
             Authorization: `Bearer ${process.env.RAKUTEN_APP_ACCESS_KEY}`,
-            Origin: 'https://example.com',
+            Origin: process.env.ORIGIN_URL || 'https://example.com',
         },
     });
 
