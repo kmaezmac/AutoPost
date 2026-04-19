@@ -185,7 +185,10 @@ export const createWordPressPost = async ({ title, content, excerpt, tagNames = 
     console.log(`[wp] username: ${process.env.WP_USERNAME}`);
     console.log(`[wp] app password set: ${!!process.env.WP_APP_PASSWORD}`);
 
-    const tagIds = await Promise.all(tagNames.map(t => getOrCreateWpTerm('tags', t)));
+    const tagIds = [];
+    for (const t of tagNames) {
+        tagIds.push(await getOrCreateWpTerm('tags', t));
+    }
     console.log(`[wp] tagIds: ${JSON.stringify(tagIds)}`);
 
     const postUrl = `${base}/wp-json/wp/v2/posts`;
