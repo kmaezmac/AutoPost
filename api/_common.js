@@ -152,42 +152,91 @@ const WP_HEADERS = () => ({
 
 const getOrCreateWpTerm = async (endpoint, name) => {
     const base = wpBase();
-    const searchUrl = `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`;
     try {
-        const search = await axios.get(searchUrl, { headers: WP_HEADERS() });
+        const search = await axios.get(
+            `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`,
+            { headers: WP_HEADERS() }
+        );
         if (search.data.length > 0) return search.data[0].id;
     } catch (e) {
-        console.warn(`[wp] term search failed: ${e.response?.status} ${e.message}`);
+        console.warn(`[wp] term search failed (${endpoint}/${name}): ${e.response?.status}`);
     }
     const created = await axios.post(
         `${base}/wp-json/wp/v2/${endpoint}`,
         { name },
         { headers: WP_HEADERS() }
     );
+    console.log(`[wp] term created: ${endpoint}/${name} id=${created.data.id}`);
     return created.data.id;
 };
 
 /**
- * WordPressに記事を投稿する
- * @param {{ title, content, excerpt, tagNames, status }} params
+ * 画像URLをWordPressメディアライブラリにアップロードしてIDを返す
  */
-export const createWordPressPost = async ({ title, content, excerpt, tagNames = [], status = 'publish' }) => {
+export const uploadImageToWordPress = async (imageUrl) => {
+    console.log(`[wp] uploading image: ${imageUrl}`);
+    const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    const buffer = Buffer.from(imgRes.data);
+    const contentType = imgRes.headers['content-type'] || 'image/jpeg';
+    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    const filename = `product-${Date.now()}.${ext}`;
+
+    const res = await axios.post(
+        `${wpBase()}/wp-json/wp/v2/media`,
+        buffer,
+        {
+            headers: {
+                ...WP_HEADERS(),
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${filename}"`,
+            },
+        }
+    );
+    console.log(`[wp] media uploaded id=${res.data.id}`);
+    return res.data.id;
+};
+
+/**
+ * WordPressに記事を投稿する
+ * @param {{ title, content, excerpt, tagNames, categoryName, featuredImageUrl, status }} params
+ */
+export const createWordPressPost = async ({
+    title, content, excerpt,
+    tagNames = [], categoryName = null, featuredImageUrl = null,
+    status = 'publish',
+}) => {
     const base = wpBase();
-    console.log(`[wp] base URL: ${base}`);
+    console.log(`[wp] creating post: ${title}`);
 
     const tagIds = [];
     for (const t of tagNames) {
         tagIds.push(await getOrCreateWpTerm('tags', t));
     }
-    console.log(`[wp] tagIds: ${JSON.stringify(tagIds)}`);
 
-    const postUrl = `${base}/wp-json/wp/v2/posts`;
-    console.log(`[wp] POST ${postUrl}`);
-    const res = await axios.post(
-        postUrl,
-        { title, content, excerpt, tags: tagIds, status, comment_status: 'open', ping_status: 'closed' },
-        { headers: WP_HEADERS() }
-    );
+    const categoryId = categoryName
+        ? await getOrCreateWpTerm('categories', categoryName)
+        : null;
+
+    let featuredMediaId = null;
+    if (featuredImageUrl) {
+        try {
+            featuredMediaId = await uploadImageToWordPress(featuredImageUrl);
+        } catch (e) {
+            console.warn(`[wp] image upload failed: ${e.message}`);
+        }
+    }
+
+    const body = {
+        title, content, excerpt,
+        tags: tagIds,
+        ...(categoryId ? { categories: [categoryId] } : {}),
+        ...(featuredMediaId ? { featured_media: featuredMediaId } : {}),
+        status,
+        comment_status: 'open',
+        ping_status: 'closed',
+    };
+
+    const res = await axios.post(`${base}/wp-json/wp/v2/posts`, body, { headers: WP_HEADERS() });
     console.log(`[wp] post created: ${res.data.link}`);
     return res.data;
 };
