@@ -139,74 +139,38 @@ export const fetchAmazonProduct = async () => {
 };
 
 // ============================================================
-// WordPress REST API
+// WordPress（カスタムプラグインエンドポイント経由）
 // ============================================================
-
-const wpAuthHeader = () =>
-    'Basic ' + Buffer.from(`${process.env.WP_USERNAME}:${process.env.WP_APP_PASSWORD}`).toString('base64');
 
 const wpBase = () => (process.env.WP_SITE_URL || '').replace(/\/$/, '');
 
-const WP_HEADERS = () => ({
-    Authorization: wpAuthHeader(),
-    'Content-Type': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (compatible; AutoPost/1.0)',
-});
-
-const getOrCreateWpTerm = async (endpoint, name) => {
-    const base = wpBase();
-    const searchUrl = `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`;
-    console.log(`[wp] GET ${searchUrl}`);
-    try {
-        const search = await axios.get(searchUrl, { headers: WP_HEADERS() });
-        console.log(`[wp] term search status: ${search.status}, found: ${search.data.length}`);
-        if (search.data.length > 0) return search.data[0].id;
-    } catch (e) {
-        console.warn(`[wp] term search failed: ${e.response?.status} ${e.message}`);
-    }
-    const createUrl = `${base}/wp-json/wp/v2/${endpoint}`;
-    console.log(`[wp] POST ${createUrl} name=${name}`);
-    const created = await axios.post(
-        createUrl,
-        { name },
-        { headers: WP_HEADERS() }
-    );
-    console.log(`[wp] term created id: ${created.data.id}`);
-    return created.data.id;
-};
-
 /**
- * WordPressに記事を投稿する
- * @param {{ title, content, excerpt, tagNames, status }} params
+ * WordPressに記事を投稿する（autopost-api プラグイン経由）
+ * Basic Auth 不要・シークレットキー認証
+ * @param {{ title, content, excerpt, tagNames }} params
  */
-export const createWordPressPost = async ({ title, content, excerpt, tagNames = [], status = 'publish' }) => {
+export const createWordPressPost = async ({ title, content, excerpt, tagNames = [] }) => {
     const base = wpBase();
-    console.log(`[wp] base URL: ${base}`);
-    console.log(`[wp] username: ${process.env.WP_USERNAME}`);
-    console.log(`[wp] app password set: ${!!process.env.WP_APP_PASSWORD}`);
+    const secret = process.env.WP_SECRET_KEY;
+    const url = `${base}/wp-json/autopost/v1/post`;
 
-    const tagIds = [];
-    for (const t of tagNames) {
-        tagIds.push(await getOrCreateWpTerm('tags', t));
-    }
-    console.log(`[wp] tagIds: ${JSON.stringify(tagIds)}`);
+    console.log(`[wp] POST ${url}`);
+    console.log(`[wp] secret set: ${!!secret}`);
+    console.log(`[wp] title: ${title}`);
+    console.log(`[wp] tags: ${JSON.stringify(tagNames)}`);
 
-    const postUrl = `${base}/wp-json/wp/v2/posts`;
-    console.log(`[wp] POST ${postUrl}`);
     const res = await axios.post(
-        postUrl,
+        url,
+        { title, content, excerpt, tags: tagNames },
         {
-            title,
-            content,
-            excerpt,
-            tags: tagIds,
-            status,
-            comment_status: 'open',
-            ping_status: 'closed',
-        },
-        { headers: WP_HEADERS() }
+            headers: {
+                'Content-Type': 'application/json',
+                'X-AutoPost-Secret': secret,
+                'User-Agent': 'Mozilla/5.0 (compatible; AutoPost/1.0)',
+            },
+        }
     );
-    console.log(`[wp] post created: ${res.data.link}`);
+    console.log(`[wp] post created id=${res.data.id} link=${res.data.link}`);
     return res.data;
 };
 
