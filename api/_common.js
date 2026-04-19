@@ -147,13 +147,18 @@ const wpAuthHeader = () =>
 
 const wpBase = () => (process.env.WP_SITE_URL || '').replace(/\/$/, '');
 
+const WP_HEADERS = () => ({
+    Authorization: wpAuthHeader(),
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (compatible; AutoPost/1.0)',
+});
+
 const getOrCreateWpTerm = async (endpoint, name) => {
-    const auth = wpAuthHeader();
     const base = wpBase();
     const searchUrl = `${base}/wp-json/wp/v2/${endpoint}?search=${encodeURIComponent(name)}&per_page=1`;
     console.log(`[wp] GET ${searchUrl}`);
     try {
-        const search = await axios.get(searchUrl, { headers: { Authorization: auth } });
+        const search = await axios.get(searchUrl, { headers: WP_HEADERS() });
         console.log(`[wp] term search status: ${search.status}, found: ${search.data.length}`);
         if (search.data.length > 0) return search.data[0].id;
     } catch (e) {
@@ -164,7 +169,7 @@ const getOrCreateWpTerm = async (endpoint, name) => {
     const created = await axios.post(
         createUrl,
         { name },
-        { headers: { Authorization: auth, 'Content-Type': 'application/json' } }
+        { headers: WP_HEADERS() }
     );
     console.log(`[wp] term created id: ${created.data.id}`);
     return created.data.id;
@@ -175,7 +180,6 @@ const getOrCreateWpTerm = async (endpoint, name) => {
  * @param {{ title, content, excerpt, tagNames, status }} params
  */
 export const createWordPressPost = async ({ title, content, excerpt, tagNames = [], status = 'publish' }) => {
-    const auth = wpAuthHeader();
     const base = wpBase();
     console.log(`[wp] base URL: ${base}`);
     console.log(`[wp] username: ${process.env.WP_USERNAME}`);
@@ -197,7 +201,7 @@ export const createWordPressPost = async ({ title, content, excerpt, tagNames = 
             comment_status: 'open',
             ping_status: 'closed',
         },
-        { headers: { Authorization: auth, 'Content-Type': 'application/json' } }
+        { headers: WP_HEADERS() }
     );
     console.log(`[wp] post created: ${res.data.link}`);
     return res.data;
