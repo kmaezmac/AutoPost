@@ -1,4 +1,5 @@
 import axios from 'axios';
+import he from 'he';
 
 // ============================================================
 // OpenAI (chat/completions)
@@ -240,6 +241,46 @@ export const createWordPressPost = async ({
 
     const res = await axios.post(`${base}/wp-json/wp/v2/posts`, body, { headers: WP_HEADERS() });
     console.log(`[wp] post created: ${res.data.link}`);
+    return res.data;
+};
+
+// ============================================================
+// Hatena Blog (AtomPub)
+// ============================================================
+
+/**
+ * はてなブログに記事を投稿する
+ * @param {{ title, content, categories, draft }} params
+ */
+export const postToHatena = async ({ title, content, categories = [], draft = false }) => {
+    const categoryXml = categories
+        .map(c => `<category term="${he.escape(c)}" />`)
+        .join('\n    ');
+
+    const xmlData = `<?xml version="1.0" encoding="utf-8"?>
+<entry xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app">
+  <title>${he.escape(title)}</title>
+  <content type="text/html">${he.escape(content)}</content>
+  <updated>${new Date().toISOString()}</updated>
+  ${categoryXml}
+  <app:control>
+    <app:draft>${draft ? 'yes' : 'no'}</app:draft>
+  </app:control>
+</entry>`;
+
+    console.log(`[hatena] posting: ${title}`);
+    const res = await axios.post(
+        process.env.HATENA_URL,
+        xmlData,
+        {
+            headers: { 'Content-Type': 'application/xml' },
+            auth: {
+                username: process.env.HATENA_USERNAME,
+                password: process.env.HATENA_PASSWORD,
+            },
+        }
+    );
+    console.log(`[hatena] posted status: ${res.status}`);
     return res.data;
 };
 
