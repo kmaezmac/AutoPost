@@ -1,5 +1,11 @@
 import axios from 'axios';
 import he from 'he';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+);
 
 // ============================================================
 // OpenAI (chat/completions)
@@ -289,10 +295,56 @@ export const postToHatena = async ({ title, content, categories = [], draft = fa
 // ============================================================
 
 /**
+ * Supabaseからrefresh_tokenを取得し、access_tokenを返す
+ * 新しいrefresh_tokenはSupabaseに保存する
+ */
+const getPinterestToken = async () => {
+    const accountId = process.env.PINTEREST_ACCOUNT_ID || 1;
+
+    const { data: row, error } = await supabase
+        .from('pinterest_tokens')
+        .select('refresh_token')
+        .eq('id', accountId)
+        .single();
+    if (error) throw new Error('[pinterest] supabase fetch error: ' + error.message);
+    console.log('[pinterest] refresh_token fetched from supabase');
+
+    const params = new URLSearchParams();
+    params.append('grant_type', 'refresh_token');
+    params.append('refresh_token', row.refresh_token);
+
+    const res = await axios.post(
+        'https://api.pinterest.com/v5/oauth/token',
+        params,
+        {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            auth: {
+                username: process.env.PINTEREST_CLIENT_ID,
+                password: process.env.PINTEREST_CLIENT_SECRET,
+            },
+        }
+    );
+    console.log('[pinterest] token refreshed');
+
+    if (res.data.refresh_token) {
+        const { error: updateErr } = await supabase
+            .from('pinterest_tokens')
+            .update({ refresh_token: res.data.refresh_token, updated_at: new Date().toISOString() })
+            .eq('id', accountId);
+        if (updateErr) console.error('[pinterest] supabase update error:', updateErr.message);
+        else console.log('[pinterest] new refresh_token saved to supabase');
+    }
+
+    return res.data.access_token;
+};
+
+/**
  * PinterestにPinを作成する
  * @param {{ boardId, title, description, link, imageUrl }} params
  */
 export const createPinterestPin = async ({ boardId, title, description, link, imageUrl }) => {
+    const token = await getPinterestToken();
+
     const res = await axios.post(
         'https://api.pinterest.com/v5/pins',
         {
@@ -307,7 +359,7 @@ export const createPinterestPin = async ({ boardId, title, description, link, im
         },
         {
             headers: {
-                Authorization: `Bearer ${process.env.PINTEREST_ACCESS_TOKEN}`,
+                Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
         }
